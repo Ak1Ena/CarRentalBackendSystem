@@ -1,5 +1,6 @@
 package lab.microservice.user.Controller;
 
+import lab.microservice.user.dtos.LoginRequest;
 import lab.microservice.user.dtos.UserDto;
 import lab.microservice.user.entity.User;
 import lab.microservice.user.service.UserService;
@@ -41,7 +42,25 @@ public class UserController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+    @PostMapping("/login")
+    public ResponseEntity<UserDto> login(@RequestBody LoginRequest request){
+        if (request.getUsername() == null || request.getPassword() == null ||
+            request.getUsername().isEmpty() || request.getPassword().isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
 
+        Optional<UserDto> user = userService.getUserByUsername(request.getUsername());
+        if (user.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        UserDto u = user.get();
+        if (u.getPassword().equals(request.getPassword())) {
+            u.setPassword(null);
+            return ResponseEntity.ok(u);
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+    }
+    
     @GetMapping("/email/{email}")
     public ResponseEntity<UserDto> getUserByEmail(@PathVariable String email) {
         return userService.getUserByEmail(email)
