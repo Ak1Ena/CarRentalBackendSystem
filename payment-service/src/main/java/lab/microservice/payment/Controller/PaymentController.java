@@ -298,46 +298,38 @@ public class PaymentController {
 
     // makePayment
     @PatchMapping("/{paymentId}/paid")
-    @Transactional
-    public ResponseEntity<PaymentDto> makePayment(@PathVariable("paymentId") Long paymentId,
-            @RequestBody PaymentDto paymentmethod) throws JsonProcessingException {
+@Transactional
+public ResponseEntity<PaymentDto> makePayment(@PathVariable("paymentId") Long paymentId) throws JsonProcessingException {
 
-        Payment payment = repo.findById(paymentId).orElse(null);
-        if (payment == null)
-            return ResponseEntity.notFound().build();
+    Payment payment = repo.findById(paymentId).orElse(null);
+    if (payment == null)
+        return ResponseEntity.notFound().build();
 
-        if (payment.getStatus() == PaymentStatus.PAID) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
-
-        if (paymentmethod == null || paymentmethod.getPaymentMethod() == null
-                || paymentmethod.getPaymentMethod().trim().isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        final PaymentMethod method;
-        try {
-            method = PaymentMethod.valueOf(paymentmethod.getPaymentMethod().trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().build();
-        }
-
-        payment.setStatus(PaymentStatus.PAID);
-        payment.setPaidAt(LocalDateTime.now());
-        payment.setPaymentMethod(method);
-        payment = repo.save(payment);
-
-        PaymentEventDto event = new PaymentEventDto();
-        event.setEvent("payment-status-updated");
-        event.setStatus("PAID");
-        event.setPaymentMethod(method.name());
-        event.setPaidAt(payment.getPaidAt().format(PAID_AT_FMT));
-        event.setReserveId(payment.getReserveId());
-        event.setPaymentId(payment.getPaymentId());
-        String json = mapper.writeValueAsString(event);
-        kafka.send("payment", json);
-        return ResponseEntity.ok(convertToDto(payment));
+    if (payment.getStatus() == PaymentStatus.PAID) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).build();
     }
+
+    // ✅ ตั้งค่า payment method default เช่น CASH
+    PaymentMethod method = PaymentMethod.CASH;
+
+    payment.setStatus(PaymentStatus.PAID);
+    payment.setPaidAt(LocalDateTime.now());
+    payment.setPaymentMethod(method);
+    payment = repo.save(payment);
+
+    // ส่ง event ไป Kafka
+    PaymentEventDto event = new PaymentEventDto();
+    event.setEvent("payment-status-updated");
+    event.setStatus("PAID");
+    event.setPaymentMethod(method.name());
+    event.setPaidAt(payment.getPaidAt().format(PAID_AT_FMT));
+    event.setReserveId(payment.getReserveId());
+    event.setPaymentId(payment.getPaymentId());
+    String json = mapper.writeValueAsString(event);
+    kafka.send("payment", json);
+
+    return ResponseEntity.ok(convertToDto(payment));
+}
 
     // deletePayment
     @DeleteMapping("/{paymentId}")

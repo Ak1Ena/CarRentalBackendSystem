@@ -80,7 +80,7 @@ public void paymentStatusUpdated(ConsumerRecord<String, String> record) throws J
             PaymentStatus paymentStatus = PaymentStatus.valueOf(status);
 
             Optional<Receipt> receiptOp = receiptRepository.findByReserveId(reserveId); // หรือ findById(receiptId)
-            if (receiptOp == null) {
+            if (receiptOp.isEmpty()) {
                 log.warn("reserveId with ID {} not found", reserveId);
                 return;
             }
