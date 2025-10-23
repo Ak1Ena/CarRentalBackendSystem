@@ -136,6 +136,8 @@ public class PaymentController {
 
             for (CarDto car : cars) {
                 ObjectNode carNode = mapper.createObjectNode();
+                car.setImg2(null);
+                car.setImg3(null);
                 carNode.set("car", mapper.valueToTree(car));
                 ArrayNode reservesArr = mapper.createArrayNode();
 
@@ -155,7 +157,6 @@ public class PaymentController {
                 List<ReserveDto> successfulReserves = reserves.stream()
                         .filter(r -> r != null && "SUCCESS".equalsIgnoreCase(r.getStatus()))
                         .collect(Collectors.toList());
-
                 // ✅ ถ้าไม่มี reserve ที่ status == SUCCESS ก็ข้ามรถนี้
                 if (successfulReserves.isEmpty()) {
                     continue;
