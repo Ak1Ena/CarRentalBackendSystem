@@ -50,6 +50,7 @@ import lab.microservice.payment.FeignClient.UserFeignClient;
 import lab.microservice.payment.Repository.PaymentRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 /**
  *
  * @author User
@@ -121,7 +122,6 @@ public class PaymentController {
                 cars = carClient.getCarsByUserId(ownerId);
             } catch (Exception ex) {
                 logger.error("Failed to fetch cars for owner {}: {}", ownerId, ex.getMessage(), ex);
-                // return 502 since upstream failed
                 ObjectNode error = mapper.createObjectNode();
                 error.put("error", "Failed to fetch cars for owner");
                 return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(error);
@@ -146,15 +146,22 @@ public class PaymentController {
                     logger.warn("Failed to fetch reserves for car {}: {}", car.getId(), ex.getMessage());
                 }
 
+                // ✅ ถ้าไม่มี reserve เลย ก็ข้ามรถนี้
                 if (reserves == null || reserves.isEmpty()) {
-                    carNode.set("reserves", reservesArr);
-                    res.add(carNode);
                     continue;
                 }
 
-                for (ReserveDto reserve : reserves) {
-                    if (reserve == null)
-                        continue;
+                // ✅ กรองเฉพาะ reserve ที่มีสถานะ SUCCESS
+                List<ReserveDto> successfulReserves = reserves.stream()
+                        .filter(r -> r != null && "SUCCESS".equalsIgnoreCase(r.getStatus()))
+                        .collect(Collectors.toList());
+
+                // ✅ ถ้าไม่มี reserve ที่ status == SUCCESS ก็ข้ามรถนี้
+                if (successfulReserves.isEmpty()) {
+                    continue;
+                }
+
+                for (ReserveDto reserve : successfulReserves) {
                     ObjectNode reservNode = mapper.createObjectNode();
                     reservNode.set("reserve", mapper.valueToTree(reserve));
 
@@ -189,6 +196,7 @@ public class PaymentController {
                     reservesArr.add(reservNode);
                 }
 
+                // ✅ ใส่เฉพาะรถที่มี reserve SUCCESS
                 carNode.set("reserves", reservesArr);
                 res.add(carNode);
             }
@@ -199,7 +207,6 @@ public class PaymentController {
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {
-            // catch any unexpected errors and log stacktrace
             logger.error("Unexpected error in getPaymentDetailsForOwner for owner {}: {}", ownerId, e.getMessage(), e);
             ObjectNode error = mapper.createObjectNode();
             error.put("error", "Internal server error");
@@ -334,6 +341,9 @@ public class PaymentController {
         event.setPaidAt(payment.getPaidAt().format(PAID_AT_FMT));
         event.setReserveId(payment.getReserveId());
         event.setPaymentId(payment.getPaymentId());
+        event.setUserId(payment.getUserId());
+        event.setTotal(payment.getGrandTotal());
+        event.setUsername(payment.getUsername());
         String json = mapper.writeValueAsString(event);
         kafka.send("payment", json);
         return ResponseEntity.ok(convertToDto(payment));

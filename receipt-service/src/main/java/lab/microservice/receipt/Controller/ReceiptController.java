@@ -66,7 +66,8 @@ public class ReceiptController {
     private String topic;
     ObjectMapper mapper = new ObjectMapper();
 
-    public ReceiptController(ReceiptRepository repo, KafkaTemplate<String, String> kafka,UserFeignClient userClient, PaymentClient paymentClient, CarFeignClient carClient, ReserveClient reserveClient) {
+    public ReceiptController(ReceiptRepository repo, KafkaTemplate<String, String> kafka, UserFeignClient userClient,
+            PaymentClient paymentClient, CarFeignClient carClient, ReserveClient reserveClient) {
         this.repo = repo;
         this.kafka = kafka;
         this.userClient = userClient;
@@ -74,29 +75,30 @@ public class ReceiptController {
         this.carClient = carClient;
         this.reserveClient = reserveClient;
     }
+
     @GetMapping("/payment/{receiptId}")
-    public ResponseEntity<JsonNode> getPaymentByReceipt(@PathVariable Long id){
+    public ResponseEntity<JsonNode> getPaymentByReceipt(@PathVariable Long id) {
         Receipt receipt = repo.getById(id);
         JsonNode payment = paymentClient.getPaymentByPaymentId(id);
         return ResponseEntity.ok(payment);
     }
 
     // @GetMapping("/details/{receiptId}")
-    // public ResponseEntity<List<Map<String,Object>>> getReceiptWithDetails(@PathVariable Long receiptid){
-    //     Map<String,Object> res = new HashMap<>();
-    //     List result = new ArrayList<>();
-    //     Optional<Receipt>opt = repo.findById(receiptid);
-    //     if (!opt.isPresent()) {
-    //         return ResponseEntity.notFound().build();
-    //     }
-    //     Receipt receipt = opt.get();
-    //     res.put(receipt, receipt)
-        
+    // public ResponseEntity<List<Map<String,Object>>>
+    // getReceiptWithDetails(@PathVariable Long receiptid){
+    // Map<String,Object> res = new HashMap<>();
+    // List result = new ArrayList<>();
+    // Optional<Receipt>opt = repo.findById(receiptid);
+    // if (!opt.isPresent()) {
+    // return ResponseEntity.notFound().build();
+    // }
+    // Receipt receipt = opt.get();
+    // res.put(receipt, receipt)
 
-    //     return ResponseEntity.ok(result);
+    // return ResponseEntity.ok(result);
     // }
 
-     @GetMapping
+    @GetMapping
     public ResponseEntity<List<Receipt>> getAllReceipts() {
         List<Receipt> receipts = repo.findAll();
         return ResponseEntity.ok(receipts);
@@ -105,56 +107,95 @@ public class ReceiptController {
     @GetMapping("/{id}")
     public ResponseEntity<ReceiptDto> getReceiptByReceiptId(@PathVariable Long id) {
         return repo.findById(id)
-                   .map(this::toDto)
-                   .map(ResponseEntity::ok)
-                   .orElse(ResponseEntity.notFound().build());
+                .map(this::toDto)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/reserve/{reserveId}")
     public ResponseEntity<ReceiptDto> getByReserve(@PathVariable Long reserveId) {
         return repo.findByReserveId(reserveId)
-                   .map(this::toDto)
-                   .map(ResponseEntity::ok)
-                   .orElse(ResponseEntity.notFound().build());
+                .map(this::toDto)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
-   @GetMapping("user/{userId}")
-    public ResponseEntity<List<Map<String,Object>>> getByUserId(@PathVariable Long userId) {
+    @GetMapping("user/{userId}")
+    public ResponseEntity<List<Map<String, Object>>> getByUserId(@PathVariable Long userId) {
         try {
-            List<Map<String,Object>> result = new ArrayList<>();
+            // 1️⃣ ดึง user
+            UserDto customer = null;
+            try {
+                customer = userClient.getUserById(userId);
+            } catch (Exception ex) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+            }
 
+            // 2️⃣ ดึงใบเสร็จ
             List<Receipt> receipts = repo.findByuserId(userId);
-            UserDto customer = userClient.getUserById(userId);
+            if (receipts == null || receipts.isEmpty()) {
+                return ResponseEntity.noContent().build();
+            }
+
+            List<Map<String, Object>> result = new ArrayList<>();
 
             for (Receipt receipt : receipts) {
-                ReserveDto reserve = reserveClient.getReserveByReserveId(receipt.getReserveId());
-                UserDto owner = userClient.getUserById(reserve.getUserId());
-                CarDto car = carClient.getCarByCarId(reserve.getCarId());
-                PaymentDto payment = paymentClient.getPaymentByReserveId(reserve.getId());
+                try {
+                    ReserveDto reserve = reserveClient.getReserveByReserveId(receipt.getReserveId());
+                    if (reserve == null || !"SUCCESS".equalsIgnoreCase(reserve.getStatus())) {
+                        continue;
+                    }
 
-                Map<String,Object> res = new HashMap<>();
-                res.put("owner", owner.getName());
-                res.put("user", customer.getName());
-                res.put("car", car);
-                res.put("payment", payment);
-                res.put("receipt", receipt);
-                res.put("reserve", reserve);
+                    CarDto car = carClient.getCarByCarId(reserve.getCarId());
+                    if (car == null)
+                        continue;
 
-                result.add(res);
+                    UserDto owner = null;
+                    try {
+                        owner = userClient.getUserById(car.getUserId());
+                    } catch (Exception ex) {
+                        owner = null;
+                    }
+
+                    PaymentDto payment = null;
+                    try {
+                        payment = paymentClient.getPaymentByReserveId(reserve.getId());
+                    } catch (Exception ex) {
+                        payment = null;
+                    }
+
+                    Map<String, Object> res = new HashMap<>();
+                    res.put("owner", owner != null ? owner.getName() : null);
+                    res.put("user", customer != null ? customer.getName() : null);
+                    res.put("car", car);
+                    res.put("payment", payment);
+                    res.put("receipt", receipt);
+                    res.put("reserve", reserve);
+
+                    result.add(res);
+
+                } catch (Exception ex) {
+                    // ข้ามแถวที่ error โดยไม่ log
+                    continue;
+                }
+            }
+
+            if (result.isEmpty()) {
+                return ResponseEntity.noContent().build();
             }
 
             return ResponseEntity.ok(result);
+
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-}
-
+    }
 
     @GetMapping("/status/{status}")
     public List<ReceiptDto> getByStatus(@PathVariable String status) {
         PaymentStatus ps = parseStatus(status);
         return repo.findByStatus(ps)
-                   .stream().map(this::toDto).collect(Collectors.toList());
+                .stream().map(this::toDto).collect(Collectors.toList());
     }
 
     @PostMapping
@@ -168,9 +209,9 @@ public class ReceiptController {
         }
 
         UserDto userJson = userClient.getUserById(req.getUserId());
-        String userName = (userJson != null) 
-        ? userJson.getName() 
-        : "Unknown";
+        String userName = (userJson != null)
+                ? userJson.getName()
+                : "Unknown";
         if (userName == "Unknown" || userName.isBlank()) {
             return ResponseEntity.badRequest().build();
         }
@@ -191,11 +232,14 @@ public class ReceiptController {
 
     @PutMapping("/{id}")
     @Transactional
-    public ResponseEntity<ReceiptDto> replace(@PathVariable Long id, @RequestBody ReceiptDto body) throws JsonProcessingException {
+    public ResponseEntity<ReceiptDto> replace(@PathVariable Long id, @RequestBody ReceiptDto body)
+            throws JsonProcessingException {
         Receipt r = repo.findById(id).orElse(null);
-        if (r == null) return ResponseEntity.notFound().build();
+        if (r == null)
+            return ResponseEntity.notFound().build();
 
-        if (body.getUserId() != null) r.setUserId(body.getUserId());
+        if (body.getUserId() != null)
+            r.setUserId(body.getUserId());
 
         if (body.getReserveId() != null && !body.getReserveId().equals(r.getReserveId())) {
             if (repo.existsByReserveId(body.getReserveId())) {
@@ -205,7 +249,7 @@ public class ReceiptController {
         }
 
         if (body.getStatus() != null) {
-            r.setStatus(parseStatus(body.getStatus()));  
+            r.setStatus(parseStatus(body.getStatus()));
         }
 
         if (body.getItems() != null) {
@@ -225,13 +269,16 @@ public class ReceiptController {
 
     @PatchMapping("/{id}")
     @Transactional
-    public ResponseEntity<ReceiptDto> patch(@PathVariable Long id, @RequestBody ReceiptDto patch) throws JsonProcessingException {
+    public ResponseEntity<ReceiptDto> patch(@PathVariable Long id, @RequestBody ReceiptDto patch)
+            throws JsonProcessingException {
         Receipt r = repo.findById(id).orElse(null);
-        if (r == null) return ResponseEntity.notFound().build();
+        if (r == null)
+            return ResponseEntity.notFound().build();
 
         boolean needRecalc = false;
 
-        if (patch.getUserId() != null) r.setUserId(patch.getUserId());
+        if (patch.getUserId() != null)
+            r.setUserId(patch.getUserId());
 
         if (patch.getReserveId() != null && !patch.getReserveId().equals(r.getReserveId())) {
             if (repo.existsByReserveId(patch.getReserveId())) {
@@ -246,7 +293,8 @@ public class ReceiptController {
             needRecalc = true;
         }
 
-        if (needRecalc) recalcTotals(r);
+        if (needRecalc)
+            recalcTotals(r);
         r = repo.save(r);
         // ReceiptEventDto event = new ReceiptEventDto();
         // event.setEvent("receipt-updated");
@@ -259,20 +307,23 @@ public class ReceiptController {
     @DeleteMapping("/{id}")
     @Transactional
     public ResponseEntity<Void> deleteByReceiptId(@PathVariable Long id) {
-        if (!repo.existsById(id)) return ResponseEntity.notFound().build();
+        if (!repo.existsById(id))
+            return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/user/{userId}")
     public ResponseEntity<Void> deleteAllByUserId(@PathVariable Long id) {
-        if (!repo.existsById(id)) return ResponseEntity.notFound().build();
+        if (!repo.existsById(id))
+            return ResponseEntity.notFound().build();
         repo.deleteById(id);
         return ResponseEntity.noContent().build();
     }
 
     private void addItemsFromDto(Receipt r, List<ReceiptItemDto> items) {
-        if (items == null) return;
+        if (items == null)
+            return;
         for (ReceiptItemDto it : items) {
             ReceiptItem e = new ReceiptItem();
             e.setDescription(it.getDescription());
@@ -283,15 +334,15 @@ public class ReceiptController {
         }
     }
 
-    //คำนวณยอด
+    // คำนวณยอด
     private void recalcTotals(Receipt r) {
         BigDecimal subtotal = BigDecimal.ZERO;
         for (ReceiptItem it : r.getItems()) {
-            BigDecimal line = BigDecimal.valueOf(it.getUnitPrice())   
-        .multiply(BigDecimal.valueOf(it.getQuantity()));
+            BigDecimal line = BigDecimal.valueOf(it.getUnitPrice())
+                    .multiply(BigDecimal.valueOf(it.getQuantity()));
             subtotal = subtotal.add(line);
         }
-        BigDecimal vat   = subtotal.multiply(VAT_RATE);
+        BigDecimal vat = subtotal.multiply(VAT_RATE);
         BigDecimal grand = subtotal.add(vat);
 
         r.setSubtotal(subtotal);
@@ -310,11 +361,11 @@ public class ReceiptController {
         dto.setGrandTotal(r.getGrandTotal());
         dto.setStatus(r.getStatus() == null ? null : r.getStatus().name());
         try {
-        UserDto userJson = userClient.getUserById(r.getUserId());
-        dto.setUserName(userJson.getUsername());
-    } catch (Exception e) {
-        dto.setUserName("User not found");
-    }
+            UserDto userJson = userClient.getUserById(r.getUserId());
+            dto.setUserName(userJson.getUsername());
+        } catch (Exception e) {
+            dto.setUserName("User not found");
+        }
 
         List<ReceiptItemDto> items = new LinkedList<>();
         for (ReceiptItem e : r.getItems()) {
@@ -330,9 +381,11 @@ public class ReceiptController {
     }
 
     private PaymentStatus parseStatus(String s) {
-        if (s == null || s.isBlank()) return null;
-        try { return PaymentStatus.valueOf(s.trim().toUpperCase()); }
-        catch (IllegalArgumentException ex) {
+        if (s == null || s.isBlank())
+            return null;
+        try {
+            return PaymentStatus.valueOf(s.trim().toUpperCase());
+        } catch (IllegalArgumentException ex) {
             throw new BadStatusException(s);
         }
     }
@@ -352,6 +405,3 @@ public class ReceiptController {
         }
     }
 }
-
-
-

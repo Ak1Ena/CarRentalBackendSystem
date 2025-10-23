@@ -10,13 +10,13 @@ import lab.microservice.receipt.Dtos.PaymentDto;
 
 @FeignClient(name = "payment-service")
 public interface PaymentClient {
-    @GetMapping("/payment/{id}")
+    @GetMapping("/payments/{id}")
     JsonNode getPaymentByPaymentId(@PathVariable("id") Long id);
 
-    @GetMapping("/payment/user/{id}")
+    @GetMapping("/payments/user/{id}")
     PaymentDto getPaymentByUserId(@PathVariable("id") Long id);
 
-    @GetMapping("/payment/reserve/{reserveId}")
+    @GetMapping("/payments/reserve/{reserveId}")
     PaymentDto getPaymentByReserveId(@PathVariable("reserveId") Long id);
     
 }
