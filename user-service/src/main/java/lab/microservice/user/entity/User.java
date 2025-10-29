@@ -200,6 +200,6 @@ public class User {
     }
 
     public enum UserRole{
-        USER,OWNER
+        RENTAL,OWNER
     }
 }
