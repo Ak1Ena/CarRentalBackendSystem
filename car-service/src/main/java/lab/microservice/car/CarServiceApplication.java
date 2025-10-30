@@ -23,7 +23,7 @@ public class CarServiceApplication {
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")      // Allow all endpoints
                         .allowedOrigins("*")    // Allow all origins
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
                         .allowedHeaders("*");   // Allow all headers
             }
         };
