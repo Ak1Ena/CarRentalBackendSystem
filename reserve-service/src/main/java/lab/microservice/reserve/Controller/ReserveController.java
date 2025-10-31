@@ -1,22 +1,5 @@
 package lab.microservice.reserve.Controller;
 
-import lab.microservice.reserve.entity.Reserve;
-import lab.microservice.reserve.Dtos.CarDto;
-import lab.microservice.reserve.Dtos.PaymentDto;
-import lab.microservice.reserve.Dtos.ReceiptDto;
-import lab.microservice.reserve.Dtos.ReserveDto;
-import lab.microservice.reserve.Dtos.UserDto;
-import lab.microservice.reserve.Dtos.PaymentDto.PaymentStatus;
-import lab.microservice.reserve.FeignClient.CarClient;
-import lab.microservice.reserve.FeignClient.PaymentClient;
-import lab.microservice.reserve.FeignClient.ReceiptClient;
-import lab.microservice.reserve.FeignClient.UserFeignClient;
-import lab.microservice.reserve.Repo.ReserveRepository;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,6 +7,31 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import lab.microservice.reserve.Dtos.CarDto;
+import lab.microservice.reserve.Dtos.PaymentDto;
+import lab.microservice.reserve.Dtos.PaymentDto.PaymentStatus;
+import lab.microservice.reserve.Dtos.ReserveDto;
+import lab.microservice.reserve.Dtos.UserDto;
+import lab.microservice.reserve.FeignClient.CarClient;
+import lab.microservice.reserve.FeignClient.PaymentClient;
+import lab.microservice.reserve.FeignClient.ReceiptClient;
+import lab.microservice.reserve.FeignClient.UserFeignClient;
+import lab.microservice.reserve.Repo.ReserveRepository;
+import lab.microservice.reserve.entity.Reserve;
 @RestController
 @RequestMapping("/reserves")
 public class ReserveController {
@@ -197,12 +205,11 @@ public class ReserveController {
                         }catch( Exception e ){
                             paymentDto.setUserName("UNKNOWN");
                         }
-                        paymentDto.setGrandTotal(BigDecimal.valueOf(dto.getPrice()));
+                        paymentDto.setGrandTotal(BigDecimal.valueOf(reserve.getPrice()));
                         paymentDto.setPaidAt(null);
                         paymentDto.setPaymentMethod("CASH");
                         paymentDto.setStatus(String.valueOf(PaymentStatus.PENDING));
                         paymentDto.setReserveId(dto.getId());
-                        paymentDto.setGrandTotal(BigDecimal.valueOf(dto.getPrice()));
                         paymentClient.createPayment(paymentDto);
                     }
                     Reserve updated = reserveRepository.save(reserve);
